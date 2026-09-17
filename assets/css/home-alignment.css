@@ -1,0 +1,7 @@
+/* HOME master grid: one centered desktop content container shared by the header, hero content and all content bands. */
+.home-v2{--home-grid:min(1280px,calc(100% - 64px))}
+.home-v2{overflow:visible}
+.home-v2 .header-inner,.home-v2 .hero-inner,.home-v2 .home-wrap,.home-v2 .ribbon-inner,.home-v2 .cta-grid,.home-v2 .footer-grid,.home-v2 .footer-line{width:var(--home-grid);max-width:none;margin-inline:auto}
+.home-v2 .hero-home{background-position:center 49%}
+@media(max-width:900px){.home-v2 .menu-button{display:block;margin-left:auto}.home-v2 .site-nav{position:absolute;top:80px;right:0;left:0;display:none;padding:8px 32px 18px;background:#fff;border-bottom:1px solid var(--line)}.home-v2 .site-nav.open{display:block}.home-v2 .nav-list{display:block}.home-v2 .nav-list a{padding:12px 0;border:0;font-size:11px}.home-v2 .nav-list .quote-link{display:inline-flex;margin-top:9px}.home-v2 .about-panel{width:310px}}
+@media(max-width:700px){.home-v2{--home-grid:calc(100% - 40px)}.home-v2 .hero-home{background-position:61% center}}
