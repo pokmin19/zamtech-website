@@ -1,0 +1,12 @@
+/* HSE-only PPE artwork: clean, unbranded garments. */
+.hse-page .hse-hero {
+  background-image: linear-gradient(90deg, rgba(0, 43, 73, .97), rgba(0, 43, 73, .88) 31%, rgba(0, 43, 73, .52) 56%, rgba(0, 43, 73, .1) 100%), url('../images/about-hero-workers.png');
+}
+
+.hse-page .hse-integrated {
+  background-image: linear-gradient(90deg, rgba(0, 43, 73, .98), rgba(0, 43, 73, .82) 55%, rgba(0, 43, 73, .12)), url('../hse/lower-worker-unbranded.png');
+}
+
+.hse-page .hse-policy {
+  background: linear-gradient(90deg, #e9f6fc 0%, #effaff 56%, rgba(235, 248, 252, .25) 65%), url('../hse/lower-worker-unbranded.png') right 55%/cover;
+}
