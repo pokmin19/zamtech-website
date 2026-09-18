@@ -1,0 +1,13 @@
+/* Structural corrections scoped exclusively to About Us. */
+.about-v2 .values{display:block}
+.about-v2 .values .about-wrap,.about-v2 .panels .about-wrap{width:min(1760px,calc(100% - 80px));max-width:none;margin-inline:auto}
+.about-v2 .value-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:100%;gap:24px}
+.about-v2 .value-card{width:100%;min-width:0}
+.about-v2 .panel-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:24px}
+.about-v2 .about-hero{background-image:url('../images/about-hero-workers.png')}
+.about-v2 .hero-side{width:158px;padding:13px 12px 10px;justify-self:end;align-self:start;margin-top:38px;background:linear-gradient(135deg,rgba(8,80,149,.23),rgba(7,48,102,.14));border:1px solid rgba(89,216,239,.2);backdrop-filter:blur(2px)}
+.about-v2 .hero-side div{margin-bottom:28px;padding-left:12px;font-weight:800}.about-v2 .hero-side div:last-child{margin-bottom:0}
+.about-v2 .region-map{min-height:240px}.about-v2 .bangkok{left:42%;top:31%}.about-v2 .hcm{left:55%;top:39%}.about-v2 .manila{left:69%;top:37%}.about-v2 .brunei{left:62%;top:53%}.about-v2 .kk{left:59%;top:43%}.about-v2 .kl{left:47%;top:54%}.about-v2 .singapore{left:50%;top:61%}.about-v2 .jakarta{left:44%;top:70%}.about-v2 .shanghai{left:71%;top:14%}.about-v2 .seoul{left:78%;top:11%}.about-v2 .tokyo{left:85%;top:19%}.about-v2 .perth{left:69%;top:80%}
+.about-v2 .home-footer .footer-grid{width:min(1280px,calc(100% - 64px));max-width:none;grid-template-columns:1.25fr repeat(3,1fr);gap:34px}.about-v2 .home-footer .footer-actions{display:none}
+@media(max-width:900px){.about-v2 .values .about-wrap,.about-v2 .panels .about-wrap{width:calc(100% - 56px)}.about-v2 .value-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.about-v2 .panel-grid{grid-template-columns:1fr}.about-v2 .home-footer .footer-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.about-v2 .values .about-wrap,.about-v2 .panels .about-wrap{width:calc(100% - 40px)}.about-v2 .value-grid{grid-template-columns:1fr}.about-v2 .home-footer .footer-grid{width:calc(100% - 40px);grid-template-columns:1fr 1fr}.about-v2 .hero-side{display:none}}
