@@ -124,7 +124,7 @@
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
         setStatus(result.message || 'We couldn\'t submit your enquiry right now. Please try again or contact us directly.', 'error');
-        if (result.code === 'TURNSTILE_FAILED' || result.code === 'TURNSTILE_EXPIRED') resetVerification();
+        if (['TURNSTILE_MISSING', 'TURNSTILE_FAILED', 'TURNSTILE_EXPIRED', 'SERVER_CONFIG_ERROR'].includes(result.code)) resetVerification();
         return;
       }
       form.reset();

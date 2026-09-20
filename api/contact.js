@@ -16,6 +16,7 @@ const FILE_TYPES = {
 };
 
 const fail = (res, status, code, message) => res.status(status).json({ code, message });
+const logStage = (stage, details = {}) => console.info(JSON.stringify({ event: 'contact_submission', stage, ...details }));
 const clean = (value, max = 1000) => typeof value === 'string' ? value.trim().replace(/\u0000/g, '').slice(0, max) : '';
 const headerSafe = value => !/[\r\n]/.test(value);
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
@@ -92,20 +93,21 @@ async function rateLimit(ip) {
   if (!url || !token || !salt) return { ok: false, configuration: true };
   const key = `contact-rate:${crypto.createHash('sha256').update(`${salt}:${ip || 'unknown'}`).digest('hex')}`;
   const request = (command, args) => fetch(`${url}/pipeline`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify([[command, key, ...args]]) });
-  const increment = await request('INCR', []); const incrementResult = await increment.json(); const count = Number(incrementResult?.[0]?.result);
+  const increment = await request('INCR', []); if (!increment.ok) throw new Error('RATE_LIMIT_SERVICE_FAILED'); const incrementResult = await increment.json(); const count = Number(incrementResult?.[0]?.result);
   if (!Number.isFinite(count)) return { ok: false, configuration: true };
-  if (count === 1) await request('EXPIRE', [String(WINDOW_SECONDS)]);
+  if (count === 1) { const expiry = await request('EXPIRE', [String(WINDOW_SECONDS)]); if (!expiry.ok) throw new Error('RATE_LIMIT_SERVICE_FAILED'); }
   return { ok: count <= MAX_SUBMISSIONS };
 }
 
-function trustedClientIp(req) {
+function trustedClientIdentity(req) {
   const vercelRequestId = clean(req.headers['x-vercel-id'], 256);
   const vercelIp = clean(req.headers['x-vercel-forwarded-for'], 64);
   // Vercel overwrites this header at its edge. We do not parse browser-supplied x-forwarded-for.
-  if (vercelRequestId && vercelIp) return vercelIp;
-  // Local development only uses the socket peer; preview and production fail closed without Vercel metadata.
-  if (process.env.VERCEL_ENV === 'development' && req.socket?.remoteAddress) return req.socket.remoteAddress;
-  return null;
+  if (vercelRequestId && vercelIp) return { rateLimitIdentity: `vercel:${vercelIp}`, turnstileIp: vercelIp };
+  // Local development only uses the socket peer; preview and production use the anonymous bucket below.
+  if (process.env.VERCEL_ENV === 'development' && req.socket?.remoteAddress) return { rateLimitIdentity: `local:${req.socket.remoteAddress}`, turnstileIp: req.socket.remoteAddress };
+  // A salted anonymous bucket keeps production abuse protection active without trusting client headers.
+  return { rateLimitIdentity: 'production-anonymous', turnstileIp: '' };
 }
 
 async function sendResend(payload, attachment) {
@@ -125,22 +127,30 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return fail(res, 405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
   if (!String(req.headers['content-type'] || '').toLowerCase().includes('application/json')) return fail(res, 415, 'UNSUPPORTED_MEDIA_TYPE', 'Invalid submission format.');
   try {
-    const body = await readJson(req); const ip = trustedClientIp(req);
+    logStage('request_received');
+    const body = await readJson(req); const client = trustedClientIdentity(req);
     const payload = { name: clean(body.name, 100), company: clean(body.company, 120), email: clean(body.email, 254).toLowerCase(), phone: clean(body.phone, 50), enquiryType: clean(body.enquiryType, 60), productService: clean(body.productService, 200), quantity: clean(body.quantity, 80), projectLocation: clean(body.projectLocation, 160), requiredDeliveryDate: clean(body.requiredDeliveryDate, 20), message: clean(body.message, 5000) };
-    if (clean(body.website, 200)) return fail(res, 400, 'INVALID_SUBMISSION', 'We could not submit your enquiry right now. Please try again or contact us directly.');
-    if (!payload.name || !payload.company || !payload.email || !payload.phone || !payload.message || !ENQUIRY_TYPES.has(payload.enquiryType) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email) || ![payload.name, payload.company, payload.email, payload.phone].every(headerSafe)) return fail(res, 400, 'VALIDATION', 'Please complete all required fields and try again.');
-    if (!ip) return fail(res, 503, 'CLIENT_IDENTITY_UNAVAILABLE', 'We couldn\'t submit your enquiry right now. Please try again or contact us directly.');
-    const turnstile = await verifyTurnstile(clean(body.turnstileToken, 2048), ip);
-    if (!turnstile.ok) return fail(res, turnstile.configuration ? 503 : 400, turnstile.expired ? 'TURNSTILE_EXPIRED' : 'TURNSTILE_FAILED', turnstile.expired ? 'Verification expired. Please complete the verification again.' : 'Human verification failed. Please try again.');
-    const limit = await rateLimit(ip); if (!limit.ok) return fail(res, limit.configuration ? 503 : 429, limit.configuration ? 'RATE_LIMIT_UNAVAILABLE' : 'RATE_LIMITED', limit.configuration ? 'We couldn\'t submit your enquiry right now. Please try again or contact us directly.' : 'Too many submission attempts were detected. Please wait a little and try again, or contact us directly.');
-    const attachment = await validAttachment(body.attachment); if (!attachment.ok) return fail(res, 400, 'INVALID_ATTACHMENT', attachment.message);
-    const delivery = await sendResend(payload, attachment.value);
-    console.info(JSON.stringify({ event: 'contact_submission', outcome: 'accepted', emailId: delivery.id, acknowledgementSent: delivery.acknowledgement }));
+    if (clean(body.website, 200)) { logStage('honeypot_triggered'); return fail(res, 400, 'HONEYPOT_TRIGGERED', 'We could not submit your enquiry right now. Please try again or contact us directly.'); }
+    if (!payload.name || !payload.company || !payload.email || !payload.phone || !payload.message || !ENQUIRY_TYPES.has(payload.enquiryType) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email) || ![payload.name, payload.company, payload.email, payload.phone].every(headerSafe)) { logStage('validation_failed'); return fail(res, 400, 'VALIDATION_FAILED', 'Please complete all required fields and try again.'); }
+    logStage('validation_passed');
+    const turnstileToken = clean(body.turnstileToken, 2048);
+    if (!turnstileToken) { logStage('turnstile_missing'); return fail(res, 400, 'TURNSTILE_MISSING', 'Please complete human verification and try again.'); }
+    const turnstile = await verifyTurnstile(turnstileToken, client.turnstileIp);
+    if (!turnstile.ok) { const code = turnstile.configuration ? 'SERVER_CONFIG_ERROR' : turnstile.expired ? 'TURNSTILE_EXPIRED' : 'TURNSTILE_FAILED'; logStage('turnstile_failed', { code }); return fail(res, turnstile.configuration ? 503 : 400, code, turnstile.expired ? 'Verification expired. Please complete the verification again.' : 'Please complete human verification and try again.'); }
+    logStage('turnstile_passed');
+    let limit; try { limit = await rateLimit(client.rateLimitIdentity); } catch { logStage('rate_limit_failed', { code: 'RATE_LIMIT_SERVICE_FAILED' }); return fail(res, 503, 'RATE_LIMIT_SERVICE_FAILED', 'We couldn\'t submit your enquiry right now. Please try again or contact us directly.'); }
+    if (!limit.ok) { const code = limit.configuration ? 'SERVER_CONFIG_ERROR' : 'RATE_LIMIT_EXCEEDED'; logStage('rate_limit_failed', { code }); return fail(res, limit.configuration ? 503 : 429, code, limit.configuration ? 'We couldn\'t submit your enquiry right now. Please try again or contact us directly.' : 'Too many submission attempts. Please wait and try again.'); }
+    logStage('rate_limit_passed');
+    const attachment = await validAttachment(body.attachment); if (!attachment.ok) { logStage('attachment_failed', { code: 'ATTACHMENT_INVALID' }); return fail(res, 400, 'ATTACHMENT_INVALID', attachment.message); }
+    logStage('attachment_passed');
+    let delivery; try { delivery = await sendResend(payload, attachment.value); } catch { logStage('resend_failed', { code: 'EMAIL_DELIVERY_FAILED' }); return fail(res, 502, 'EMAIL_DELIVERY_FAILED', 'We couldn\'t submit your enquiry right now. Please try again or contact us directly.'); }
+    logStage('resend_internal_accepted', { acknowledgementSent: delivery.acknowledgement });
+    logStage('complete');
     return res.status(200).json({ success: true });
   } catch (error) {
-    const code = error.message === 'BODY_TOO_LARGE' ? 'BODY_TOO_LARGE' : 'SUBMISSION_FAILED';
-    console.info(JSON.stringify({ event: 'contact_submission', outcome: code }));
-    return fail(res, code === 'BODY_TOO_LARGE' ? 413 : 502, code, code === 'BODY_TOO_LARGE' ? 'The selected attachment is too large. Please upload a file within the allowed size limit.' : 'We couldn\'t submit your enquiry right now. Please try again or contact us directly.');
+    const code = error.message === 'BODY_TOO_LARGE' ? 'ATTACHMENT_TOO_LARGE' : 'INTERNAL_ERROR';
+    logStage('request_failed', { code });
+    return fail(res, code === 'ATTACHMENT_TOO_LARGE' ? 413 : 502, code, code === 'ATTACHMENT_TOO_LARGE' ? 'The selected attachment is too large. Please upload a file within the allowed size limit.' : 'We couldn\'t submit your enquiry right now. Please try again or contact us directly.');
   }
 };
 module.exports.config = { api: { bodyParser: false } };
