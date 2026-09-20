@@ -94,7 +94,14 @@ async function rateLimit(ip) {
   const key = `contact-rate:${crypto.createHash('sha256').update(`${salt}:${ip || 'unknown'}`).digest('hex')}`;
   const baseUrl = url.replace(/\/+$/, '');
   const request = async (command, args) => {
-    const response = await fetch(`${baseUrl}/pipeline`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify([[command, key, ...args]]) });
+    let response;
+    try {
+      response = await fetch(`${baseUrl}/pipeline`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify([[command, key, ...args]]) });
+    } catch (error) {
+      // Record only the transport classification, never the configured endpoint or credential.
+      logStage('rate_limit_upstream_failed', { kind: 'network', reason: clean(error?.cause?.code || error?.name, 64) || 'unknown' });
+      throw new Error('RATE_LIMIT_SERVICE_FAILED');
+    }
     if (!response.ok) {
       logStage('rate_limit_upstream_failed', { status: response.status });
       throw new Error('RATE_LIMIT_SERVICE_FAILED');
