@@ -92,10 +92,18 @@ async function rateLimit(ip) {
   const { UPSTASH_REDIS_REST_URL: url, UPSTASH_REDIS_REST_TOKEN: token, RATE_LIMIT_SALT: salt } = process.env;
   if (!url || !token || !salt) return { ok: false, configuration: true };
   const key = `contact-rate:${crypto.createHash('sha256').update(`${salt}:${ip || 'unknown'}`).digest('hex')}`;
-  const request = (command, args) => fetch(`${url}/pipeline`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify([[command, key, ...args]]) });
-  const increment = await request('INCR', []); if (!increment.ok) throw new Error('RATE_LIMIT_SERVICE_FAILED'); const incrementResult = await increment.json(); const count = Number(incrementResult?.[0]?.result);
+  const baseUrl = url.replace(/\/+$/, '');
+  const request = async (command, args) => {
+    const response = await fetch(`${baseUrl}/pipeline`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify([[command, key, ...args]]) });
+    if (!response.ok) {
+      logStage('rate_limit_upstream_failed', { status: response.status });
+      throw new Error('RATE_LIMIT_SERVICE_FAILED');
+    }
+    return response;
+  };
+  const increment = await request('INCR', []); const incrementResult = await increment.json(); const count = Number(incrementResult?.[0]?.result);
   if (!Number.isFinite(count)) return { ok: false, configuration: true };
-  if (count === 1) { const expiry = await request('EXPIRE', [String(WINDOW_SECONDS)]); if (!expiry.ok) throw new Error('RATE_LIMIT_SERVICE_FAILED'); }
+  if (count === 1) await request('EXPIRE', [String(WINDOW_SECONDS)]);
   return { ok: count <= MAX_SUBMISSIONS };
 }
 
