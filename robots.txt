@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+# Serverless and development paths are not public search content.
+Disallow: /api/
+Disallow: /.env
+Disallow: /.git/
+Disallow: /node_modules/
+Disallow: /dist/
+Disallow: /archive/
+Disallow: /preview/
+
+Sitemap: https://www.zamtechsdnbhd.com/sitemap.xml
